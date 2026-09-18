@@ -1,0 +1,12 @@
+{
+  "scripts": {
+    "init": "bun run init.ts"
+  },
+  "dependencies": {
+    "openai": "^7.10.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.2",
+    "@types/node": "^26.6.1"
+  }
+}
