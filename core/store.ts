@@ -17,12 +17,29 @@ function transaction<T>(action: () => T): T {
 const insertEvent = database.prepare(
   "INSERT INTO events (thread_id, timestamp, data) VALUES (?, ?, ?)",
 )
+const readEvents = database.prepare(
+  "SELECT id, data FROM events WHERE thread_id = ? AND id > ? ORDER BY id",
+)
 const insertThread = database.prepare(
   "INSERT INTO threads (id, parent_id, task_id, agent_id) VALUES (?, ?, ?, ?)",
 )
 const readThread = database.prepare(
   "SELECT parent_id, task_id, agent_id FROM threads WHERE id = ?",
 )
+const readThreads = database.prepare(`
+  SELECT
+    threads.rowid AS sequence,
+    threads.id,
+    threads.parent_id,
+    threads.task_id,
+    threads.agent_id,
+    EXISTS (
+      SELECT 1 FROM pending WHERE task_thread_id = threads.id
+    ) AS pending,
+    (SELECT COUNT(*) FROM items WHERE thread_id = threads.id) AS item_count,
+    (SELECT COUNT(*) FROM events WHERE thread_id = threads.id) AS event_count
+  FROM threads ORDER BY threads.rowid
+`)
 const insertItem = database.prepare(
   "INSERT INTO items (thread_id, data) VALUES (?, ?)",
 )
@@ -73,6 +90,11 @@ function insertThreadRows(thread: Thread) {
 
 export function log(threadId: string, event: unknown) {
   insertEvent.run(threadId, Date.now(), JSON.stringify(event))
+}
+
+export function events(threadId: string, after = 0) {
+  return (readEvents.all(threadId, after) as { id: number; data: string }[])
+    .map(({ id, data }) => ({ id, event: JSON.parse(data) as unknown }))
 }
 
 export function createThread(input: Omit<Thread, "id">): Thread {
@@ -141,6 +163,37 @@ export function loadThread(threadId: string): Thread | undefined {
     items: (readItems.all(threadId) as { data: string }[])
       .map(({ data }) => JSON.parse(data) as Item),
   }
+}
+
+export function listThreads() {
+  const rows = readThreads.all() as {
+    sequence: number
+    id: string
+    parent_id: string | null
+    task_id: string | null
+    agent_id: string
+    pending: number
+    item_count: number
+    event_count: number
+  }[]
+
+  return rows.map((row) => {
+    const task = (readItems.all(row.id) as { data: string }[])
+      .map(({ data }) => JSON.parse(data) as Item)
+      .find((item) => item.type === "message" && item.role === "user")
+
+    return {
+      sequence: row.sequence,
+      id: row.id,
+      parentId: row.parent_id,
+      taskId: row.task_id,
+      agentId: row.agent_id,
+      pending: !!row.pending,
+      itemCount: row.item_count,
+      eventCount: row.event_count,
+      task: task && typeof task.content === "string" ? task.content : undefined,
+    }
+  })
 }
 
 export function appendItems(thread: Thread, items: readonly Item[]) {

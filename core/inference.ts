@@ -5,7 +5,16 @@ import config from "../config.json"
 import { log } from "./store"
 import type { Agent, Thread, Tool } from "./types"
 
-const client = new OpenAI({ maxRetries: 0 })
+const apiKey = process.env.API_KEY
+const baseURL = process.env.BASE_URL
+if (!apiKey) throw new Error("API_KEY is not set")
+if (!baseURL) throw new Error("BASE_URL is not set")
+
+const client = new OpenAI({
+  baseURL,
+  apiKey,
+  maxRetries: 0,
+})
 
 export function infer(agent: Agent, thread: Thread, tools: readonly Tool[]) {
   const request = {

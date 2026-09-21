@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Turtles</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font: 14px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: #101311;
+      color: #dce5de;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 18px 24px;
+      border-bottom: 1px solid #29312b;
+      background: #101311e8;
+      backdrop-filter: blur(10px);
+    }
+    h1 { margin: 0; font: 600 18px/1 inherit; }
+    #status { color: #829087; font-size: 12px; }
+    main { padding: 24px; }
+    #roots { display: grid; gap: 24px; max-width: 1100px; margin: auto; }
+    .thread {
+      padding: 14px;
+      border: 1px solid #344039;
+      border-radius: 8px;
+      background: #171c19;
+    }
+    .thread-head { display: flex; gap: 9px; align-items: center; }
+    .agent { color: #f1f7f2; font-weight: 700; }
+    .pending {
+      padding: 1px 6px;
+      border: 1px solid #b68a3b;
+      border-radius: 999px;
+      color: #e8bf72;
+      font-size: 11px;
+    }
+    .meta { margin-top: 5px; color: #748078; font-size: 11px; }
+    .tasks { display: grid; gap: 14px; margin: 16px 0 0 15px; }
+    .task {
+      padding-left: 15px;
+      border-left: 1px solid #526159;
+    }
+    .task-head { color: #8aa999; font-size: 11px; }
+    .task-text {
+      margin: 5px 0 10px;
+      color: #b8c5bc;
+      white-space: pre-wrap;
+    }
+    .stages { display: grid; gap: 8px; }
+    .empty { color: #748078; text-align: center; padding: 60px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Turtles · thread tree</h1>
+    <span id="status">connecting</span>
+  </header>
+  <main><div id="roots"></div></main>
+  <script>
+    const roots = document.querySelector("#roots")
+    const status = document.querySelector("#status")
+    let threads = []
+
+    function element(tag, className, text) {
+      const node = document.createElement(tag)
+      if (className) node.className = className
+      if (text !== undefined) node.textContent = text
+      return node
+    }
+
+    function short(id) {
+      return id.slice(0, 8)
+    }
+
+    function renderThread(thread) {
+      const card = element("article", "thread")
+      const head = element("div", "thread-head")
+      head.append(element("span", "agent", thread.agentId))
+      if (thread.pending) head.append(element("span", "pending", "pending"))
+      card.append(head)
+      card.append(element(
+        "div",
+        "meta",
+        `${short(thread.id)} · ${thread.itemCount} items · ${thread.eventCount} events`,
+      ))
+
+      const children = threads.filter((item) => item.parentId === thread.id)
+      if (!children.length) return card
+
+      const tasks = new Map()
+      for (const child of children) {
+        const id = child.taskId ?? child.id
+        if (!tasks.has(id)) tasks.set(id, [])
+        tasks.get(id).push(child)
+      }
+
+      const taskList = element("div", "tasks")
+      for (const [taskId, stages] of tasks) {
+        stages.sort((a, b) => a.sequence - b.sequence)
+        const task = element("section", "task")
+        task.append(element("div", "task-head", `dispatch ${short(taskId)}`))
+        if (stages[0].task) {
+          task.append(element("div", "task-text", stages[0].task))
+        }
+        const stageList = element("div", "stages")
+        for (const stage of stages) stageList.append(renderThread(stage))
+        task.append(stageList)
+        taskList.append(task)
+      }
+      card.append(taskList)
+      return card
+    }
+
+    async function refresh() {
+      try {
+        const response = await fetch("/api/threads")
+        if (!response.ok) throw new Error(await response.text())
+        threads = (await response.json()).threads
+        const rootThreads = threads.filter((thread) => !thread.parentId)
+        roots.replaceChildren(...(
+          rootThreads.length
+            ? rootThreads.map(renderThread)
+            : [element("div", "empty", "No threads yet")]
+        ))
+        status.textContent = `${threads.length} threads · ${new Date().toLocaleTimeString()}`
+      } catch (error) {
+        status.textContent = error.message
+      }
+    }
+
+    refresh()
+    setInterval(refresh, 750)
+  </script>
+</body>
+</html>

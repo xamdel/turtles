@@ -1,6 +1,8 @@
 {
   "scripts": {
-    "init": "bun run init.ts"
+    "init": "bun run init.ts",
+    "cli": "bun run cli.ts",
+    "observe": "bun run observe.ts"
   },
   "dependencies": {
     "openai": "^7.10.0"
