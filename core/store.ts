@@ -46,6 +46,13 @@ const insertItem = database.prepare(
 const readItems = database.prepare(
   "SELECT data FROM items WHERE thread_id = ? ORDER BY id",
 )
+const readTask = database.prepare(`
+  SELECT data FROM items
+  WHERE thread_id = ?
+    AND json_extract(data, '$.type') = 'message'
+    AND json_extract(data, '$.role') = 'user'
+  ORDER BY id LIMIT 1
+`)
 const insertMail = database.prepare(
   "INSERT INTO mail (thread_id, data) VALUES (?, ?)",
 )
@@ -178,9 +185,10 @@ export function listThreads() {
   }[]
 
   return rows.map((row) => {
-    const task = (readItems.all(row.id) as { data: string }[])
-      .map(({ data }) => JSON.parse(data) as Item)
-      .find((item) => item.type === "message" && item.role === "user")
+    const taskRow = row.parent_id
+      ? readTask.get(row.id) as { data: string } | null
+      : null
+    const task = taskRow ? JSON.parse(taskRow.data) as Item : undefined
 
     return {
       sequence: row.sequence,
@@ -191,7 +199,9 @@ export function listThreads() {
       pending: !!row.pending,
       itemCount: row.item_count,
       eventCount: row.event_count,
-      task: task && typeof task.content === "string" ? task.content : undefined,
+      task: task?.type === "message" && typeof task.content === "string"
+        ? task.content
+        : undefined,
     }
   })
 }

@@ -85,6 +85,7 @@ export function initialize() {
   const database = new Database(path, { create: true })
 
   try {
+    database.exec("PRAGMA journal_mode = WAL")
     database.transaction(() => {
       database.exec(schema)
       const insert = database.prepare(

@@ -39,7 +39,7 @@ const poll = setInterval(() => {
       input.prompt()
     }
   }
-}, 25)
+}, 100)
 
 console.log(`Thread ${thread.id}`)
 input.prompt()
