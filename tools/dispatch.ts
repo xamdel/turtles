@@ -7,7 +7,7 @@ import type { Tool } from "../core/types"
 const dispatch: Tool = {
   name: "dispatch",
   description:
-    "Dispatch a task to a specialized agent. Returns immediately; the result arrives as a message when the work completes.",
+    "Dispatch a task to a specialized agent. Returns immediately; the result arrives as a message when the work completes. Use this tool liberally to decompose tasks and assign them to any specialized agent you may need.",
   parameters: {
     type: "object",
     properties: {

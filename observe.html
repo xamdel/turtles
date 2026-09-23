@@ -12,30 +12,55 @@
       color: #dce5de;
     }
     * { box-sizing: border-box; }
-    body { margin: 0; }
+    [hidden] { display: none !important; }
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; }
     header {
-      position: sticky;
-      top: 0;
-      z-index: 1;
+      flex: none;
       display: flex;
       justify-content: space-between;
       align-items: baseline;
+      gap: 16px;
       padding: 18px 24px;
       border-bottom: 1px solid #29312b;
-      background: #101311e8;
-      backdrop-filter: blur(10px);
     }
-    h1 { margin: 0; font: 600 18px/1 inherit; }
+    h1 { margin: 0; font: 600 18px/1 inherit; white-space: nowrap; }
+    nav { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+    nav a, nav button, nav label {
+      font: inherit;
+      font-size: 12px;
+      color: #8aa999;
+      background: none;
+      border: 1px solid #344039;
+      border-radius: 4px;
+      padding: 2px 8px;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    nav a:hover, nav button:hover, nav label:hover { border-color: #8aa999; }
     #status { color: #829087; font-size: 12px; }
-    main { padding: 24px; }
-    #roots { display: grid; gap: 24px; max-width: 1100px; margin: auto; }
+    main {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(340px, 2fr) minmax(0, 3fr);
+    }
+    #tree, #detail { overflow: auto; padding: 24px; }
+    #detail { border-left: 1px solid #29312b; }
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+      #detail { border-left: 0; border-top: 1px solid #29312b; }
+    }
+    #roots { display: grid; gap: 24px; }
     .thread {
       padding: 14px;
       border: 1px solid #344039;
       border-radius: 8px;
       background: #171c19;
+      cursor: pointer;
     }
+    .thread.selected { border-color: #8aa999; background: #1b2320; }
     .thread-head { display: flex; gap: 9px; align-items: center; }
+    .thread-head:hover .agent { text-decoration: underline; }
     .agent { color: #f1f7f2; font-weight: 700; }
     .pending {
       padding: 1px 6px;
@@ -45,6 +70,7 @@
       font-size: 11px;
     }
     .meta { margin-top: 5px; color: #748078; font-size: 11px; }
+    .meta a { color: #8aa999; }
     .tasks { display: grid; gap: 14px; margin: 16px 0 0 15px; }
     .task {
       padding-left: 15px;
@@ -58,18 +84,68 @@
     }
     .stages { display: grid; gap: 8px; }
     .empty { color: #748078; text-align: center; padding: 60px 0; }
+
+    .detail-head { padding-bottom: 14px; border-bottom: 1px solid #29312b; }
+    .detail-head h2 { margin: 0; font: 700 16px/1.2 inherit; }
+    .agent-info {
+      margin-top: 8px;
+      color: #b8c5bc;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+    .agent-info.dim { color: #748078; }
+    .items { display: grid; gap: 12px; padding-top: 16px; }
+    .item {
+      padding: 10px 12px;
+      border-radius: 6px;
+      border-left: 3px solid #526159;
+      background: #171c19;
+    }
+    .item-head {
+      margin-bottom: 6px;
+      color: #8aa999;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .item-body {
+      margin: 0;
+      font: inherit;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .item.user { border-color: #6ea8d8; }
+    .item.assistant { border-color: #7fc48f; }
+    .item.developer, .item.system { border-color: #b68a3b; }
+    .item.function_call { border-color: #b08bd4; }
+    .item.reasoning { border-color: #3a453e; color: #748078; }
   </style>
 </head>
 <body>
   <header>
     <h1>Turtles · thread tree</h1>
-    <span id="status">connecting</span>
+    <nav>
+      <a id="export" href="/api/export">export all</a>
+      <label>load snapshot<input id="file" type="file" accept=".json,application/json" hidden></label>
+      <button id="live" hidden>back to live</button>
+      <span id="status">connecting</span>
+    </nav>
   </header>
-  <main><div id="roots"></div></main>
+  <main>
+    <section id="tree"><div id="roots"></div></section>
+    <section id="detail"></section>
+  </main>
   <script>
     const roots = document.querySelector("#roots")
+    const detail = document.querySelector("#detail")
     const status = document.querySelector("#status")
+    const exportLink = document.querySelector("#export")
+    const fileInput = document.querySelector("#file")
+    const liveButton = document.querySelector("#live")
     let threads = []
+    let selected = location.hash.slice(1)
+    let detailKey = ""
+    let snapshot = null
 
     function element(tag, className, text) {
       const node = document.createElement(tag)
@@ -82,8 +158,40 @@
       return id.slice(0, 8)
     }
 
+    async function fetchJson(url) {
+      const response = await fetch(url)
+      if (!response.ok) throw new Error(await response.text())
+      return response.json()
+    }
+
+    async function loadThreads() {
+      if (snapshot) return snapshot.threads
+      return (await fetchJson("/api/threads")).threads
+    }
+
+    async function loadThread(id) {
+      if (!snapshot) return fetchJson(`/api/threads/${id}`)
+      const thread = snapshot.threads.find((item) => item.id === id)
+      if (!thread) throw new Error(`Thread not in snapshot: ${short(id)}`)
+      const agent = snapshot.agents.find((item) => item.id === thread.agentId)
+      return { thread, agent }
+    }
+
+    function rootOf(id) {
+      let thread = threads.find((item) => item.id === id)
+      while (thread?.parentId) {
+        thread = threads.find((item) => item.id === thread.parentId)
+      }
+      return thread?.id ?? id
+    }
+
     function renderThread(thread) {
       const card = element("article", "thread")
+      if (thread.id === selected) card.classList.add("selected")
+      card.addEventListener("click", (event) => {
+        event.stopPropagation()
+        location.hash = thread.id
+      })
       const head = element("div", "thread-head")
       head.append(element("span", "agent", thread.agentId))
       if (thread.pending) head.append(element("span", "pending", "pending"))
@@ -121,25 +229,142 @@
       return card
     }
 
+    function messageText(content) {
+      if (typeof content === "string") return content
+      return content
+        .map((part) => typeof part.text === "string" ? part.text : JSON.stringify(part))
+        .join("\n")
+    }
+
+    function pretty(text) {
+      try {
+        return JSON.stringify(JSON.parse(text), null, 2)
+      } catch {
+        return text
+      }
+    }
+
+    function renderItem(item) {
+      const kind = item.type === "message" ? item.role : item.type
+      const node = element("div", `item ${kind}`)
+      if (item.type === "message") {
+        node.append(element("div", "item-head", item.role))
+        node.append(element("pre", "item-body", messageText(item.content)))
+      } else if (item.type === "function_call") {
+        node.append(element("div", "item-head", `call ${item.name}`))
+        node.append(element("pre", "item-body", pretty(item.arguments)))
+      } else if (item.type === "function_call_output") {
+        node.append(element("div", "item-head", "result"))
+        node.append(element("pre", "item-body", item.output))
+      } else {
+        node.append(element("div", "item-head", item.type))
+      }
+      return node
+    }
+
+    function renderDetail({ thread, agent }) {
+      const head = element("div", "detail-head")
+      head.append(element("h2", "", thread.agentId))
+      const meta = element("div", "meta", `thread ${thread.id}`)
+      if (thread.taskId) meta.append(` · task ${short(thread.taskId)}`)
+      if (thread.parentId) {
+        const link = element("a", "", `parent ${short(thread.parentId)}`)
+        link.href = `#${thread.parentId}`
+        meta.append(" · ", link)
+      }
+      if (!snapshot) {
+        const link = element("a", "", "export run")
+        link.href = `/api/export?root=${rootOf(thread.id)}`
+        meta.append(" · ", link)
+      }
+      head.append(meta)
+      if (agent) {
+        head.append(element(
+          "div",
+          "agent-info",
+          `${agent.model} · tools: ${agent.tools.join(", ") || "none"}`,
+        ))
+        head.append(element("div", "agent-info", agent.description))
+        head.append(element("div", "agent-info dim", agent.instructions))
+      }
+
+      const items = element("div", "items")
+      for (const item of thread.items) items.append(renderItem(item))
+      if (!thread.items.length) items.append(element("div", "empty", "No items yet"))
+      detail.replaceChildren(head, items)
+    }
+
+    async function refreshDetail() {
+      if (!selected) {
+        if (detailKey === "empty") return
+        detailKey = "empty"
+        detail.replaceChildren(element("div", "empty", "Select a thread"))
+        return
+      }
+      const data = await loadThread(selected)
+      const key = JSON.stringify(data)
+      if (key === detailKey) return
+      detailKey = key
+      renderDetail(data)
+    }
+
     async function refresh() {
       try {
-        const response = await fetch("/api/threads")
-        if (!response.ok) throw new Error(await response.text())
-        threads = (await response.json()).threads
+        threads = await loadThreads()
         const rootThreads = threads.filter((thread) => !thread.parentId)
         roots.replaceChildren(...(
           rootThreads.length
             ? rootThreads.map(renderThread)
             : [element("div", "empty", "No threads yet")]
         ))
-        status.textContent = `${threads.length} threads · ${new Date().toLocaleTimeString()}`
+        await refreshDetail()
+        status.textContent = snapshot
+          ? `snapshot ${snapshot.name} · ${threads.length} threads`
+          : `${threads.length} threads · ${new Date().toLocaleTimeString()}`
       } catch (error) {
         status.textContent = error.message
+        if (!threads.length) roots.replaceChildren(element("div", "empty", error.message))
       }
     }
 
+    function setSource(next) {
+      snapshot = next
+      exportLink.hidden = !!snapshot
+      liveButton.hidden = !snapshot
+      threads = []
+      detailKey = ""
+      location.hash = ""
+      refresh()
+    }
+
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files[0]
+      if (!file) return
+      try {
+        const data = JSON.parse(await file.text())
+        if (!Array.isArray(data.threads) || !Array.isArray(data.agents)) {
+          throw new Error("missing threads or agents")
+        }
+        setSource({ name: file.name, threads: data.threads, agents: data.agents })
+      } catch (error) {
+        status.textContent = `Could not load ${file.name}: ${error.message}`
+      } finally {
+        fileInput.value = ""
+      }
+    })
+
+    liveButton.addEventListener("click", () => setSource(null))
+
+    window.addEventListener("hashchange", () => {
+      selected = location.hash.slice(1)
+      detailKey = ""
+      refresh()
+    })
+
     refresh()
-    setInterval(refresh, 1000)
+    setInterval(() => {
+      if (!snapshot) refresh()
+    }, 1000)
   </script>
 </body>
 </html>
