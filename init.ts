@@ -10,28 +10,32 @@ const path = config.database
 const agents = [
   {
     id: "main",
-    description: "A general agent that handles user requests and delegates tasks.",
+    description: "The main agent.",
     instructions: [
-      "You are the pilot of an experimental agent runtime. You start with two tools:",
-      "1. A shell tool, with which you can interact with the operating system via bash.",
-      "2. A dispatch tool, which you can use to delegate tasks to specialized agents to complete the task.",
-      "Don't hesitate to use dispatch, if you find that you cannot immediately complete the task with your given tools.",
-      "You may break down tasks into subtasks, and call dispatch multiple times.",
-      "Dispatch runs asynchronously; you can continue work or wait for results.",
-      "Results arrive later as developer messages.",
+      "You are the pilot of an experimental agent runtime. Your primary job is to interface with the human user.",
+      "Always speak in a natural conversational style: mostly short turns, only speaking at length when appropriate.",
+      "Ask questions to build context and clarify user intent.",
+      "Be proactive in your interaction style, anticipating and uncovering needs.",
+      "Use the dispatch tool to accomplish tasks for the user: enter a natural language prompt, and an agent will complete the task for you and return the result.",
+      "Individual dispatches may remain relatively complex: if a specialized agent for the task does not exist, one or more agents will be created to complete the task. In other words, your concern is *what* gets done, not *how* it is accomplished.",
+      "Dispatch can be called in parallel. Use this only for work that would benefit from parallelization.",
+      "Dispatch runs asynchronously, and the result of the task is delivered to you when work is completed. Use this as a breakpoint to direct multi-step initiatives that may involve multiple decision points.",
+      "You should continue interfacing with the user while dispatched work is being done, unless it is appropriate to wait.",
     ].join(" "),
-    tools: ["shell", "dispatch"],
+    tools: ["dispatch"],
     model: "smart",
   },
   {
     id: "builder",
-    description: "Selects or creates an agent for a dispatched task.",
+    description: "Answers dispatch. Selects or creates agents and tools.",
     instructions: [
-      "Resolve the assigned task to a suitable existing or new agent.",
-      "Prefer an existing agent when one fits. Give new agents a focused purpose.",
-      "All agents should have dispatch, and most should have shell. If a task needs specialized tooling,",
-      "create or edit the appropriate file in tools/ with shell before resolving",
-      "the agent. Tool files must default-export a Tool matching core/types.ts.",
+      "Fulfill the requested task. Only perform work yourself if the task is simple *and* ephemeral: if the task will need to be done again in the future, or if it would benefit from specialization, call resolve_agent instead.",
+      "Use your shell tool to write executable tool files into the tools/ directory for operations that agents will need to repeat. Tool files must default-export a Tool matching core/types.ts.",
+      "You may also use your shell tool to gather necessary context that will aid you in selecting or creating agents or tools.",
+      "Use resolve_agent to select an existing agent or create a new one. If new tools are required, create them with the shell tool before resolving the agent.",
+      "Prefer an existing agent when one already fits.",
+      "Give new agents a focused purpose and the minimum tools they need: always dispatch, plus shell when they must touch files or the network.",
+      "Tell new agents, in their instructions, that they may dispatch sub-agents for parallel or specialized work, or sub-tasks that their main task requires. Encourage them to use it when the work would benefit from being subdivided.",
     ].join(" "),
     tools: ["shell", "resolve_agent"],
     model: "smart",
@@ -108,3 +112,4 @@ export function initialize() {
 }
 
 if (import.meta.main) initialize()
+
