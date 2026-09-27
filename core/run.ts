@@ -5,6 +5,16 @@ import type { Agent, Item, Thread, Tool, ToolCall } from "./types"
 
 const running = new Set<string>()
 
+export const control = {
+  mode: "manual" as "auto" | "manual",
+  queue: [] as {
+    call: ToolCall
+    agent: Agent
+    thread: Thread
+    resolve(approved: boolean): void
+  }[],
+}
+
 export function wake(threadId: string) {
   void run(threadId).then((outcome) => {
     if (!outcome?.thread.parentId) return
@@ -52,7 +62,12 @@ async function step(
 
     try {
       if (!tool) throw new Error(`Tool not found: ${call.name}`)
-      result = await tool.execute(call.arguments, { threadId: thread.id })
+      const approved = control.mode === "auto" || await new Promise<boolean>(
+        (resolve) => control.queue.push({ call, agent, thread, resolve }),
+      )
+      result = approved
+        ? await tool.execute(call.arguments, { threadId: thread.id })
+        : "Denied by user."
     } catch (error) {
       result = `Error: ${error instanceof Error ? error.message : String(error)}`
     }

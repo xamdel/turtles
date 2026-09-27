@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline"
 
-import { wake } from "./core/run"
+import { control, wake } from "./core/run"
 import * as store from "./core/store"
 
 const thread = store.createThread({
@@ -12,6 +12,19 @@ const input = createInterface({
   output: process.stdout,
   prompt: "> ",
 })
+
+let approval: (typeof control.queue)[number] | undefined
+
+function promptNext() {
+  approval = control.queue.shift()
+  if (approval) {
+    console.log(
+      `\n${approval.agent.id} [${approval.thread.id.slice(0, 8)}] ${approval.call.name}\n${approval.call.arguments}`,
+    )
+  }
+  input.setPrompt(approval ? "approve? [y/n] " : "> ")
+  input.prompt()
+}
 
 let eventId = 0
 const poll = setInterval(() => {
@@ -39,12 +52,25 @@ const poll = setInterval(() => {
       input.prompt()
     }
   }
+  if (!approval && control.queue.length) promptNext()
 }, 100)
 
 console.log(`Thread ${thread.id}`)
 input.prompt()
 input.on("line", (content) => {
-  if (!content.trim()) return input.prompt()
+  const text = content.trim()
+  if (text === "/auto" || text === "/manual") {
+    control.mode = text.slice(1) as typeof control.mode
+    if (control.mode === "manual") return input.prompt()
+    for (const item of [approval, ...control.queue.splice(0)]) item?.resolve(true)
+    return promptNext()
+  }
+  if (approval) {
+    if (text !== "y" && text !== "n") return input.prompt()
+    approval.resolve(text === "y")
+    return promptNext()
+  }
+  if (!text) return input.prompt()
 
   store.send(thread.id, {
     type: "message",
