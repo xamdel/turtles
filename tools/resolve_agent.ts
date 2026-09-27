@@ -4,13 +4,8 @@ import { handoffThread, loadAgent, loadThread } from "../core/store"
 import { resolveTools } from "../core/tools"
 import type { Agent, Tool } from "../core/types"
 
-function parseDefinition(value: unknown): Agent {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("Invalid agent definition")
-  }
-
-  const { id, description, instructions, tools, model } =
-    value as Record<string, unknown>
+function parseDefinition(value: Record<string, unknown>): Agent {
+  const { id, description, instructions, tools, model } = value
   if (
     typeof id !== "string" || !id.trim()
     || typeof description !== "string" || !description.trim()
@@ -26,40 +21,33 @@ function parseDefinition(value: unknown): Agent {
 const resolveAgent: Tool = {
   name: "resolve_agent",
   description:
-    "Resolve this task to an existing agent or a new agent definition. A successful resolution starts the selected agent and completes your work.",
+    "Resolve this task to an agent: pass only the id of an existing agent, or the complete definition of a new one. A successful resolution starts the selected agent and completes your work.",
   parameters: {
     type: "object",
     properties: {
-      agent: {
-        oneOf: [
-          {
-            type: "string",
-            description: "The id of an existing agent.",
-          },
-          {
-            type: "object",
-            description: "The complete definition of a new agent.",
-            properties: {
-              id: { type: "string" },
-              description: { type: "string" },
-              instructions: { type: "string" },
-              tools: { type: "array", items: { type: "string" } },
-              model: {
-                type: "string",
-                description: "An id from the available model catalog.",
-              },
-            },
-            required: ["id", "description", "instructions", "tools", "model"],
-            additionalProperties: false,
-          },
-        ],
+      id: {
+        type: "string",
+        description: "The id of an existing agent, or a new id for the agent being defined.",
+      },
+      description: { type: "string" },
+      instructions: { type: "string" },
+      tools: { type: "array", items: { type: "string" } },
+      model: {
+        type: "string",
+        description: "An id from the available model catalog.",
       },
     },
-    required: ["agent"],
+    required: ["id"],
     additionalProperties: false,
   },
   execute(input, { threadId }) {
-    const choice: unknown = JSON.parse(input).agent
+    const choice = JSON.parse(input) as Record<string, unknown>
+    const creating = Object.keys(choice).length > 1
+    const agent = creating ? parseDefinition(choice) : loadAgent(String(choice.id))
+    if (!agent) throw new Error(`Agent not found: ${choice.id}`)
+    if (!Object.hasOwn(config.models, agent.model)) {
+      throw new Error(`Model not found: ${agent.model}`)
+    }
 
     const caller = loadThread(threadId)
     if (!caller) throw new Error(`Thread not found: ${threadId}`)
@@ -68,13 +56,6 @@ const resolveAgent: Tool = {
       item.type === "message" && item.role === "user"
     )
     if (!task) throw new Error(`Task not found: ${caller.taskId ?? threadId}`)
-
-    const creating = typeof choice !== "string"
-    const agent = creating ? parseDefinition(choice) : loadAgent(choice)
-    if (!agent) throw new Error(`Agent not found: ${choice}`)
-    if (!Object.hasOwn(config.models, agent.model)) {
-      throw new Error(`Model not found: ${agent.model}`)
-    }
 
     resolveTools(agent.tools)
 
