@@ -21,13 +21,13 @@ function parseDefinition(value: Record<string, unknown>): Agent {
 const resolveAgent: Tool = {
   name: "resolve_agent",
   description:
-    "Resolve this task to an agent: pass only the id of an existing agent, or the complete definition of a new one. A successful resolution starts the selected agent and completes your work.",
+    "Resolve this task to an agent: pass only the id of an existing agent, or a complete definition to create or replace an agent. A successful resolution starts the selected agent and completes your work.",
   parameters: {
     type: "object",
     properties: {
       id: {
         type: "string",
-        description: "The id of an existing agent, or a new id for the agent being defined.",
+        description: "The id of the existing, new, or replacement agent.",
       },
       description: { type: "string" },
       instructions: { type: "string" },
@@ -42,8 +42,8 @@ const resolveAgent: Tool = {
   },
   execute(input, { threadId }) {
     const choice = JSON.parse(input) as Record<string, unknown>
-    const creating = Object.keys(choice).length > 1
-    const agent = creating ? parseDefinition(choice) : loadAgent(String(choice.id))
+    const defining = Object.keys(choice).length > 1
+    const agent = defining ? parseDefinition(choice) : loadAgent(String(choice.id))
     if (!agent) throw new Error(`Agent not found: ${choice.id}`)
     if (!Object.hasOwn(config.models, agent.model)) {
       throw new Error(`Model not found: ${agent.model}`)
@@ -61,7 +61,7 @@ const resolveAgent: Tool = {
 
     const thread = handoffThread(
       threadId,
-      creating ? agent : agent.id,
+      defining ? agent : agent.id,
       [task],
     )
     wake(thread.id)

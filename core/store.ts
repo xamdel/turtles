@@ -6,7 +6,7 @@ import type { Agent, Item, Thread } from "./types"
 
 const path = config.database
 if (!existsSync(path)) {
-  throw new Error(`Database not initialized at ${path}. Run \`bun run init\`.`)
+  throw new Error(`Database not initialized at ${path}. Run \`bun run db:prepare\`.`)
 }
 const database = new Database(path, { readwrite: true, create: false })
 
@@ -79,9 +79,10 @@ const pendingExists = database.prepare(
 const taskPending = database.prepare(
   "SELECT 1 FROM pending WHERE parent_id = ? AND task_thread_id = ? LIMIT 1",
 )
-const insertAgent = database.prepare(
-  "INSERT INTO agents (id, data) VALUES (?, ?)",
-)
+const upsertAgent = database.prepare(`
+  INSERT INTO agents (id, data) VALUES (?, ?)
+  ON CONFLICT(id) DO UPDATE SET data = excluded.data
+`)
 const readAgent = database.prepare("SELECT data FROM agents WHERE id = ?")
 const readAgents = database.prepare("SELECT data FROM agents ORDER BY id")
 
@@ -132,7 +133,7 @@ export function handoffThread(
     if (typeof agent === "string") {
       if (!readAgent.get(agent)) throw new Error(`Agent not found: ${agent}`)
     } else {
-      insertAgent.run(agent.id, JSON.stringify(agent))
+      upsertAgent.run(agent.id, JSON.stringify(agent))
     }
 
     const thread: Thread = {
