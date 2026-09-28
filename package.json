@@ -1,6 +1,8 @@
 {
   "scripts": {
-    "init": "bun run init.ts",
+    "turtles": "docker compose up -d --build --force-recreate && docker compose exec turtles bun run cli",
+    "down": "docker compose down",
+    "db:prepare": "bun run init.ts",
     "cli": "bun run cli.ts",
     "observe": "bun run observe.ts"
   },

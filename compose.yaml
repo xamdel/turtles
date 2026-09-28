@@ -1,0 +1,30 @@
+services:
+  turtles:
+    build: .
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+    configs:
+      - source: turtles-config
+        target: /app/config.json
+    volumes:
+      - turtles-data:/app/data
+      - turtles-tools:/app/tools
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=64m
+    ports:
+      - "127.0.0.1:3000:3000"
+
+configs:
+  turtles-config:
+    file: ./config.json
+
+volumes:
+  turtles-data:
+  turtles-tools:

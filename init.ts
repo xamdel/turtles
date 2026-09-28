@@ -83,33 +83,58 @@ const schema = `
     PRIMARY KEY (parent_id, task_thread_id)
   );
 
-  PRAGMA user_version = 1;
 `
 
-export function initialize() {
-  if (existsSync(path)) throw new Error(`Database already exists at ${path}`)
+const migrations = [
+  (database: Database) => {
+    database.exec(schema)
+    const insert = database.prepare(
+      "INSERT INTO agents (id, data) VALUES (?, ?)",
+    )
+    for (const agent of agents) insert.run(agent.id, JSON.stringify(agent))
+  },
+]
 
-  mkdirSync(dirname(path), { recursive: true })
-  const database = new Database(path, { create: true })
+function readVersion(database: Database) {
+  const row = database.query("PRAGMA user_version").get() as {
+    user_version: number
+  }
+  return row.user_version
+}
+
+export function prepareDatabase(databasePath = path) {
+  const created = !existsSync(databasePath)
+  const directory = dirname(databasePath)
+  if (directory !== ".") mkdirSync(directory, { recursive: true })
+  const database = new Database(databasePath, { create: true })
+  let version = 0
 
   try {
-    database.exec("PRAGMA journal_mode = WAL")
-    database.transaction(() => {
-      database.exec(schema)
-      const insert = database.prepare(
-        "INSERT INTO agents (id, data) VALUES (?, ?)",
+    version = readVersion(database)
+    if (version > migrations.length) {
+      throw new Error(
+        `Database version ${version} is newer than supported version ${migrations.length}`,
       )
-      for (const agent of agents) insert.run(agent.id, JSON.stringify(agent))
-    }).immediate()
+    }
+    database.exec("PRAGMA journal_mode = WAL")
+
+    while (version < migrations.length) {
+      const nextVersion = version + 1
+      database.transaction(() => {
+        migrations[version](database)
+        database.exec(`PRAGMA user_version = ${nextVersion}`)
+      }).immediate()
+      version = nextVersion
+    }
   } catch (error) {
     database.close()
-    unlinkSync(path)
+    if (created && existsSync(databasePath)) unlinkSync(databasePath)
     throw error
   }
 
   database.close()
-  console.log(`Initialized database at ${path}`)
+  console.log(`Prepared database at ${databasePath} (version ${version})`)
 }
 
-if (import.meta.main) initialize()
+if (import.meta.main) prepareDatabase()
 

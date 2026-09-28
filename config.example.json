@@ -1,5 +1,5 @@
 {
-  "database": "",
+  "database": "data/turtles.db",
   "models": {
     "smart": {
       "model": "",
