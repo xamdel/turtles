@@ -3,7 +3,7 @@ import * as store from "./store"
 import { resolveTools } from "./tools"
 import type { Agent, Item, Thread, Tool, ToolCall } from "./types"
 
-const running = new Set<string>()
+export const running = new Set<string>()
 
 export const control = {
   mode: "manual" as "auto" | "manual",

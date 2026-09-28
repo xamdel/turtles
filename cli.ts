@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline"
 
-import { control, wake } from "./core/run"
+import { control, running, wake } from "./core/run"
 import * as store from "./core/store"
 
 const thread = store.createThread({
@@ -24,6 +24,22 @@ function promptNext() {
   }
   input.setPrompt(approval ? "approve? [y/n] " : "> ")
   input.prompt()
+}
+
+const { stdout } = process
+let statusText = ""
+
+function status() {
+  const text = `${control.mode} · ${running.size} running`
+  if (text === statusText) return
+  statusText = text
+  stdout.write(`\x1b7\x1b[${stdout.rows};1H\x1b[2K\x1b[90m${text}\x1b[0m\x1b8`)
+}
+
+function layout() {
+  stdout.write(`\x1b[1;${stdout.rows - 1}r\x1b[${stdout.rows - 1};1H`)
+  statusText = ""
+  status()
 }
 
 let eventId = 0
@@ -53,10 +69,17 @@ const poll = setInterval(() => {
     }
   }
   if (!approval && control.queue.length) promptNext()
+  status()
 }, 100)
 
+stdout.write("\n".repeat(stdout.rows))
+layout()
 console.log(`Thread ${thread.id}`)
 input.prompt()
+stdout.on("resize", () => {
+  layout()
+  input.prompt(true)
+})
 input.on("line", (content) => {
   const text = content.trim()
   if (text === "/auto" || text === "/manual") {
@@ -79,4 +102,9 @@ input.on("line", (content) => {
   })
   wake(thread.id)
 })
-input.on("close", () => clearInterval(poll))
+input.on("SIGINT", () => input.close())
+input.on("close", () => {
+  clearInterval(poll)
+  stdout.write(`\x1b[r\x1b[${stdout.rows};1H\x1b[2K`)
+  process.exit()
+})
