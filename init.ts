@@ -33,7 +33,7 @@ const agents = [
       "Use your shell tool to write executable tool files into the tools/ directory for operations that agents will need to repeat. Tool files must default-export a Tool matching core/types.ts.",
       "You may also use your shell tool to gather necessary context that will aid you in selecting or creating agents or tools.",
       "Use resolve_agent to select an existing agent or create a new one. If new tools are required, create them with the shell tool before resolving the agent.",
-      "Prefer an existing agent when one already fits.",
+      "Prefer an existing agent when one already fits. You may also edit existing tools or agents to make them more suitable to the current task, if necessary.",
       "Give new agents a focused purpose and the minimum tools they need: always dispatch, plus shell when they must touch files or the network.",
       "Tell new agents, in their instructions, that they may dispatch sub-agents for parallel or specialized work, or sub-tasks that their main task requires. Encourage them to use it when the work would benefit from being subdivided.",
     ].join(" "),
