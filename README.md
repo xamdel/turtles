@@ -18,6 +18,6 @@ cp config.example.json config.json    # model identifiers
 bun run turtles                       # build, start sandboxed in Docker, open the CLI
 ```
 
-The observer UI is at http://localhost:3000. 
+The observer UI is at http://localhost:5505.
 
 `bun run down` stops everything. To wipe data and start fresh, add `-v`

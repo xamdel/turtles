@@ -37,7 +37,7 @@ function exportRun(db: Store, rootId: string | null) {
 
 const server = Bun.serve({
   hostname: process.env.HOST ?? "127.0.0.1",
-  port: Number(process.env.PORT ?? 3000),
+  port: Number(process.env.PORT ?? 5505),
   fetch(request) {
     const url = new URL(request.url)
     const { pathname } = url
